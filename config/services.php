@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    'rickandmorty' => [
+        'base_url' => env('RICKANDMORTY_BASE_URL', 'https://rickandmortyapi.com/api'),
+        // Segundos máximos esperando una respuesta.
+        'timeout' => (int) env('RICKANDMORTY_TIMEOUT', 10),
+        // Intentos totales por petición ante errores de red, 429 o 5xx.
+        'max_attempts' => (int) env('RICKANDMORTY_MAX_ATTEMPTS', 3),
+        // Espera base entre intentos; se multiplica por el número de intento.
+        'retry_delay_ms' => (int) env('RICKANDMORTY_RETRY_DELAY_MS', 500),
+    ],
+
 ];
