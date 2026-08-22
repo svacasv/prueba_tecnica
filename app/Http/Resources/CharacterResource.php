@@ -23,6 +23,8 @@ class CharacterResource extends JsonResource
             'current_location' => new LocationResource($this->whenLoaded('currentLocation')),
             'episodes_count' => $this->whenCounted('episodes'),
             'episodes' => EpisodeResource::collection($this->whenLoaded('episodes')),
+            // Solo en el listado de favoritos: cuándo lo marcó el usuario.
+            'favorited_at' => $this->whenPivotLoaded('favorites', fn () => $this->pivot->created_at?->toIso8601String()),
         ];
     }
 }

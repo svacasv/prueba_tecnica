@@ -15,6 +15,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Aplica el limitador "api" (definido en AppServiceProvider) a todas las rutas de la API.
         $middleware->throttleApi();
+
+        // Es una API sin páginas: a un invitado no se le redirige a ningún login,
+        // se le responde 401. Sin esto, una petición sin cabecera Accept acababa
+        // en un error 500 porque Laravel intentaba construir la ruta "login".
+        $middleware->redirectGuestsTo(fn () => null);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

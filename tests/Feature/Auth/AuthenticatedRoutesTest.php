@@ -35,6 +35,15 @@ class AuthenticatedRoutesTest extends TestCase
             ->assertJsonPath('message', 'Unauthenticated.');
     }
 
+    public function test_responde_401_en_json_aunque_el_cliente_no_pida_json(): void
+    {
+        // Sin cabeceras Accept ni X-Requested-With, como un curl a pelo.
+        $this->get('/api/favorites')
+            ->assertUnauthorized()
+            ->assertHeader('Content-Type', 'application/json')
+            ->assertJsonPath('message', 'Unauthenticated.');
+    }
+
     public function test_rechaza_un_token_que_no_existe(): void
     {
         $this->withToken('un-token-inventado')

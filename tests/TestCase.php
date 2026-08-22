@@ -2,6 +2,8 @@
 
 namespace Tests;
 
+use App\Models\User;
+use App\Services\Auth\ApiTokenService;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\Http;
 
@@ -14,6 +16,15 @@ abstract class TestCase extends BaseTestCase
         // Ningún test puede hacer peticiones HTTP reales. Si alguno lo intenta
         // sin haber definido un Http::fake(), falla con una excepción clara.
         Http::preventStrayRequests();
+    }
+
+    /**
+     * Emite un token real para el usuario y lo envía en las siguientes peticiones,
+     * igual que haría un cliente de la API.
+     */
+    protected function actingAsApiUser(User $user): static
+    {
+        return $this->withToken(app(ApiTokenService::class)->issue($user)->plainText);
     }
 
     /**
