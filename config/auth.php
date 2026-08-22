@@ -42,6 +42,13 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // Guard de la API: driver propio registrado en AppServiceProvider con
+        // Auth::viaRequest(). Lee el token de la cabecera Authorization: Bearer.
+        'api' => [
+            'driver' => 'api-token',
+            'provider' => 'users',
+        ],
     ],
 
     /*
@@ -113,5 +120,19 @@ return [
     */
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Tokens de la API
+    |--------------------------------------------------------------------------
+    |
+    | Días de validez de los tokens emitidos al registrarse o iniciar sesión.
+    | Con 0 los tokens no caducan.
+    |
+    */
+
+    'api_token' => [
+        'lifetime_days' => (int) env('API_TOKEN_LIFETIME_DAYS', 30),
+    ],
 
 ];
