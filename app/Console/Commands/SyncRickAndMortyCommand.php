@@ -8,7 +8,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 #[Signature('rickandmorty:sync
-    {--only=* : Entidades a sincronizar (locations, episodes, characters). Por defecto, todas}
+    {--only=* : Entidades a sincronizar, separadas por comas o repitiendo la opción (locations, episodes, characters). Por defecto, todas}
     {--from-raw : Reprocesa el JSON crudo guardado en la base de datos sin descargar nada}')]
 #[Description('Descarga personajes, episodios y localizaciones de la API de Rick and Morty y los guarda en la base de datos')]
 class SyncRickAndMortyCommand extends Command
@@ -19,7 +19,7 @@ class SyncRickAndMortyCommand extends Command
      */
     public function handle(SyncService $sync): int
     {
-        $entities = $this->option('only') ?: SyncService::ENTITIES;
+        $entities = $this->requestedEntities();
 
         $unknown = array_diff($entities, SyncService::ENTITIES);
 
@@ -62,5 +62,25 @@ class SyncRickAndMortyCommand extends Command
         $this->info('Sincronización completada.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Entidades pedidas por el usuario. Admite tanto repetir la opción
+     * (--only=a --only=b) como separarlas por comas (--only=a,b).
+     * Sin la opción, se sincronizan todas.
+     *
+     * @return list<string>
+     */
+    private function requestedEntities(): array
+    {
+        $requested = collect($this->option('only'))
+            ->flatMap(fn (string $value) => explode(',', $value))
+            ->map(fn (string $value) => trim($value))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        return $requested ?: SyncService::ENTITIES;
     }
 }

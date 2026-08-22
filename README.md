@@ -55,8 +55,8 @@ identificador externo, nunca se duplican.
 Opciones:
 
 ```bash
-# Solo algunas entidades
-./vendor/bin/sail artisan rickandmorty:sync --only=locations --only=episodes
+# Solo algunas entidades (separadas por comas o repitiendo la opción)
+./vendor/bin/sail artisan rickandmorty:sync --only=locations,episodes
 
 # Volver a procesar el JSON crudo guardado en la última descarga, sin tocar la red
 ./vendor/bin/sail artisan rickandmorty:sync --from-raw

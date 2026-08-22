@@ -91,6 +91,18 @@ class SyncRickAndMortyCommandTest extends TestCase
         $this->assertSame(['location', 'episode', 'character'], $requested);
     }
 
+    public function test_admite_varias_entidades_separadas_por_comas(): void
+    {
+        $this->fakeWholeApi();
+
+        $this->artisan('rickandmorty:sync', ['--only' => ['locations, episodes']])->assertSuccessful();
+
+        Http::assertSentCount(2);
+        $this->assertDatabaseCount('locations', 3);
+        $this->assertDatabaseCount('episodes', 2);
+        $this->assertDatabaseCount('characters', 0);
+    }
+
     public function test_guarda_el_json_crudo_de_cada_pagina_antes_de_procesarla(): void
     {
         $this->fakeWholeApi();
