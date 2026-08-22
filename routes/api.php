@@ -9,6 +9,10 @@ use Illuminate\Support\Facades\Route;
 
 // Todas las rutas de este fichero cuelgan de /api (ver bootstrap/app.php).
 
+// Especificación OpenAPI de esta API (la página / la muestra con Swagger UI).
+Route::get('docs', fn () => response()->file(base_path('docs/openapi.yaml'), ['Content-Type' => 'application/yaml']))
+    ->name('docs');
+
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login', [AuthController::class, 'login'])->middleware('throttle:login');

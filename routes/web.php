@@ -2,6 +2,5 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+// La única página del proyecto: la documentación interactiva de la API.
+Route::view('/', 'docs');

@@ -1,0 +1,485 @@
+openapi: 3.1.0
+
+info:
+  title: Rick and Morty API
+  version: 1.0.0
+  description: |
+    API propia construida sobre los datos sincronizados de la API pública de
+    Rick and Morty (https://rickandmortyapi.com).
+
+    - Los datos sincronizados (personajes, episodios y localizaciones) son públicos.
+    - Registro e inicio de sesión devuelven un token que se envía en la cabecera
+      `Authorization: Bearer <token>` para gestionar favoritos.
+    - Todas las respuestas de error tienen la forma `{"message": "..."}`; los
+      errores de validación (422) añaden `errors` con los fallos por campo.
+    - Los listados se paginan con `page` y `per_page` (máximo 100, por defecto 20).
+
+servers:
+  - url: http://localhost:8000/api
+    description: Entorno local con Laravel Sail
+
+tags:
+  - name: Auth
+    description: Registro, inicio y cierre de sesión
+  - name: Characters
+    description: Personajes sincronizados
+  - name: Episodes
+    description: Episodios sincronizados
+  - name: Locations
+    description: Localizaciones sincronizadas
+  - name: Favorites
+    description: Personajes favoritos del usuario autenticado
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Registrar un usuario
+      description: Crea el usuario y devuelve su primer token de acceso.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string, maxLength: 255, examples: [Rick Sanchez] }
+                email: { type: string, format: email, maxLength: 255, examples: [rick@example.com] }
+                password: { type: string, format: password, minLength: 8, examples: [wubba-lubba-dub-dub] }
+      responses:
+        '201':
+          description: Usuario creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Iniciar sesión
+      description: |
+        Comprueba las credenciales y emite un token nuevo. Cada inicio de sesión
+        genera un token distinto; los anteriores siguen siendo válidos hasta que
+        caduquen o se cierre sesión con ellos. Limitado a 10 intentos por minuto y IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        '200':
+          description: Credenciales correctas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401':
+          description: Credenciales incorrectas (mismo mensaje exista o no el email)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { message: Invalid credentials. }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Usuario autenticado
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Datos del usuario dueño del token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Cerrar sesión
+      description: Invalida el token con el que se hace la petición. Los demás tokens del usuario no se ven afectados.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Token invalidado }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+
+  /characters:
+    get:
+      tags: [Characters]
+      summary: Listar personajes
+      description: Los filtros se combinan con AND. Cada elemento incluye sus localizaciones y el número de episodios, pero no la lista de episodios (ver detalle).
+      parameters:
+        - { name: name, in: query, description: Búsqueda parcial por nombre, sin distinguir mayúsculas, schema: { type: string, maxLength: 255 } }
+        - { name: status, in: query, schema: { type: string, enum: [Alive, Dead, unknown] } }
+        - { name: species, in: query, description: Coincidencia exacta, schema: { type: string, maxLength: 255 } }
+        - { name: gender, in: query, schema: { type: string, enum: [Female, Male, Genderless, unknown] } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+      responses:
+        '200':
+          description: Página de personajes
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/PaginatedResponse' }
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Character' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /characters/{id}:
+    get:
+      tags: [Characters]
+      summary: Detalle de un personaje
+      description: Incluye origen, ubicación actual y la lista de episodios.
+      parameters:
+        - { $ref: '#/components/parameters/id' }
+      responses:
+        '200':
+          description: Personaje
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Character' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /episodes:
+    get:
+      tags: [Episodes]
+      summary: Listar episodios
+      description: Ordenados por código (S01E01, S01E02…). Cada elemento incluye el número de personajes.
+      parameters:
+        - { name: name, in: query, description: Búsqueda parcial por nombre, schema: { type: string, maxLength: 255 } }
+        - { name: code, in: query, description: Código exacto, sin distinguir mayúsculas, schema: { type: string, pattern: '^S\d{2}E\d{2}$', examples: [S01E01] } }
+        - { name: season, in: query, description: Número de temporada, schema: { type: integer, minimum: 1, maximum: 99 } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+      responses:
+        '200':
+          description: Página de episodios
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/PaginatedResponse' }
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Episode' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /episodes/{id}:
+    get:
+      tags: [Episodes]
+      summary: Detalle de un episodio
+      description: Incluye la lista de personajes que aparecen en él.
+      parameters:
+        - { $ref: '#/components/parameters/id' }
+      responses:
+        '200':
+          description: Episodio
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Episode' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /locations:
+    get:
+      tags: [Locations]
+      summary: Listar localizaciones
+      description: Cada elemento incluye el número de residentes (personajes cuya ubicación actual es esta).
+      parameters:
+        - { name: name, in: query, description: Búsqueda parcial por nombre, schema: { type: string, maxLength: 255 } }
+        - { name: type, in: query, description: Coincidencia exacta, schema: { type: string, maxLength: 255 } }
+        - { name: dimension, in: query, description: Coincidencia exacta, schema: { type: string, maxLength: 255 } }
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+      responses:
+        '200':
+          description: Página de localizaciones
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/PaginatedResponse' }
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Location' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /locations/{id}:
+    get:
+      tags: [Locations]
+      summary: Detalle de una localización
+      description: Incluye los residentes (personajes cuya ubicación actual es esta localización).
+      parameters:
+        - { $ref: '#/components/parameters/id' }
+      responses:
+        '200':
+          description: Localización
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Location' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /favorites:
+    get:
+      tags: [Favorites]
+      summary: Listar mis favoritos
+      description: Personajes marcados por el usuario autenticado, los más recientes primero.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/perPage' }
+      responses:
+        '200':
+          description: Página de favoritos
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/PaginatedResponse' }
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Character' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      tags: [Favorites]
+      summary: Añadir un personaje a favoritos
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [character_id]
+              properties:
+                character_id: { type: integer, description: Identificador propio del personaje (campo `id`, no `external_id`), examples: [2] }
+      responses:
+        '201':
+          description: Añadido a favoritos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Character' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '409':
+          description: El personaje ya estaba en favoritos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { message: The character is already in your favorites. }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /favorites/{character}:
+    delete:
+      tags: [Favorites]
+      summary: Quitar un personaje de favoritos
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: character, in: path, required: true, description: Identificador propio del personaje, schema: { type: integer, minimum: 1 } }
+      responses:
+        '204': { description: Eliminado de favoritos }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404':
+          description: El personaje no existe o no estaba en los favoritos del usuario
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { message: The character is not in your favorites. }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Token devuelto por /auth/register o /auth/login.
+
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      description: Identificador propio (campo `id`, no `external_id`)
+      schema: { type: integer, minimum: 1 }
+    page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    perPage:
+      name: per_page
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+
+  responses:
+    Unauthenticated:
+      description: Falta el token, no existe, está caducado o se ha revocado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { message: Unauthenticated. }
+    NotFound:
+      description: No existe ningún registro con ese identificador
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { message: Not Found. }
+    ValidationError:
+      description: Datos de entrada o filtros no válidos
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ValidationError' }
+    TooManyRequests:
+      description: Límite de peticiones superado (cabecera Retry-After)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { message: Too Many Attempts. }
+
+  schemas:
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
+
+    ValidationError:
+      type: object
+      required: [message, errors]
+      properties:
+        message: { type: string, examples: ['The email field is required. (and 1 more error)'] }
+        errors:
+          type: object
+          description: Lista de mensajes por campo
+          additionalProperties:
+            type: array
+            items: { type: string }
+          examples:
+            - email: [The email field is required.]
+              password: [The password field must be at least 8 characters.]
+
+    PaginatedResponse:
+      type: object
+      required: [data, links, meta]
+      properties:
+        data: { type: array, items: {} }
+        links:
+          type: object
+          properties:
+            first: { type: [string, 'null'], format: uri }
+            last: { type: [string, 'null'], format: uri }
+            prev: { type: [string, 'null'], format: uri }
+            next: { type: [string, 'null'], format: uri, description: Conserva los filtros de la petición }
+        meta:
+          type: object
+          properties:
+            current_page: { type: integer }
+            from: { type: [integer, 'null'] }
+            last_page: { type: integer }
+            per_page: { type: integer }
+            to: { type: [integer, 'null'] }
+            total: { type: integer }
+
+    User:
+      type: object
+      properties:
+        id: { type: integer, examples: [1] }
+        name: { type: string, examples: [Rick Sanchez] }
+        email: { type: string, format: email, examples: [rick@example.com] }
+        created_at: { type: string, format: date-time }
+
+    AuthResponse:
+      type: object
+      required: [token, token_type, expires_at, user]
+      properties:
+        token: { type: string, description: Token en claro. Solo se devuelve en este momento; guárdalo. }
+        token_type: { type: string, const: Bearer }
+        expires_at: { type: [string, 'null'], format: date-time, description: null si el token no caduca }
+        user: { $ref: '#/components/schemas/User' }
+
+    Location:
+      type: object
+      properties:
+        id: { type: integer, examples: [3] }
+        external_id: { type: integer, description: Identificador en la API de Rick and Morty, examples: [3] }
+        name: { type: string, examples: [Citadel of Ricks] }
+        type: { type: [string, 'null'], description: null cuando la fuente no tiene el dato, examples: [Space station] }
+        dimension: { type: [string, 'null'], examples: [unknown] }
+        residents_count: { type: integer, description: Solo en el listado }
+        residents:
+          type: array
+          description: Solo en el detalle. Personajes cuya ubicación actual es esta.
+          items: { $ref: '#/components/schemas/Character' }
+
+    Episode:
+      type: object
+      properties:
+        id: { type: integer, examples: [1] }
+        external_id: { type: integer, examples: [1] }
+        name: { type: string, examples: [Pilot] }
+        code: { type: string, pattern: '^S\d{2}E\d{2}$', examples: [S01E01] }
+        air_date: { type: [string, 'null'], format: date, examples: ['2013-12-02'] }
+        characters_count: { type: integer, description: Solo en el listado }
+        characters:
+          type: array
+          description: Solo en el detalle
+          items: { $ref: '#/components/schemas/Character' }
+
+    Character:
+      type: object
+      properties:
+        id: { type: integer, examples: [2] }
+        external_id: { type: integer, examples: [2] }
+        name: { type: string, examples: [Morty Smith] }
+        status: { type: string, enum: [Alive, Dead, unknown] }
+        species: { type: string, examples: [Human] }
+        type: { type: [string, 'null'], description: null cuando la fuente no tiene el dato }
+        gender: { type: string, enum: [Female, Male, Genderless, unknown] }
+        image: { type: string, format: uri }
+        origin:
+          oneOf:
+            - { $ref: '#/components/schemas/Location' }
+            - { type: 'null' }
+          description: null cuando el origen es desconocido en la fuente
+        current_location:
+          oneOf:
+            - { $ref: '#/components/schemas/Location' }
+            - { type: 'null' }
+        episodes_count: { type: integer, description: Solo en listados }
+        episodes:
+          type: array
+          description: Solo en el detalle
+          items: { $ref: '#/components/schemas/Episode' }
+        favorited_at: { type: string, format: date-time, description: Solo en el listado de favoritos }
