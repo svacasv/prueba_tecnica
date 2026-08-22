@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Services\RickAndMorty\ResponseParser;
 use App\Services\RickAndMorty\RickAndMortyClient;
+use App\Services\Sync\SyncService;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 
@@ -25,6 +26,14 @@ class AppServiceProvider extends ServiceProvider
                 timeoutSeconds: $config['timeout'],
                 maxAttempts: $config['max_attempts'],
                 retryDelayMs: $config['retry_delay_ms'],
+            );
+        });
+
+        $this->app->bind(SyncService::class, function (Application $app) {
+            return new SyncService(
+                client: $app->make(RickAndMortyClient::class),
+                parser: $app->make(ResponseParser::class),
+                delayBetweenPagesMs: $app->make('config')->get('services.rickandmorty.delay_between_pages_ms'),
             );
         });
     }

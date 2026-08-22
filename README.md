@@ -41,6 +41,33 @@ La aplicación queda disponible en `http://localhost:8000`.
 
 ## Uso
 
+### Sincronizar los datos de Rick and Morty
+
+```bash
+./vendor/bin/sail artisan rickandmorty:sync
+```
+
+Descarga localizaciones, episodios y personajes (en ese orden, porque los
+personajes referencian a los otros dos) y los guarda en la base de datos. Se puede
+ejecutar tantas veces como se quiera: los registros se actualizan por su
+identificador externo, nunca se duplican.
+
+Opciones:
+
+```bash
+# Solo algunas entidades
+./vendor/bin/sail artisan rickandmorty:sync --only=locations --only=episodes
+
+# Volver a procesar el JSON crudo guardado en la última descarga, sin tocar la red
+./vendor/bin/sail artisan rickandmorty:sync --from-raw
+```
+
+Si alguna página falla (red, límite de peticiones, respuesta inesperada) el comando
+continúa con las siguientes, muestra el detalle al final y termina con código de
+salida 1. Basta con volver a ejecutarlo para completar lo que faltó.
+
+### Otros comandos
+
 ```bash
 # Ejecutar los tests
 ./vendor/bin/sail test

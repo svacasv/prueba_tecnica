@@ -43,6 +43,9 @@ return [
         'max_attempts' => (int) env('RICKANDMORTY_MAX_ATTEMPTS', 3),
         // Espera base entre intentos; se multiplica por el número de intento.
         'retry_delay_ms' => (int) env('RICKANDMORTY_RETRY_DELAY_MS', 500),
+        // Pausa entre páginas durante la sincronización, para no superar el
+        // límite de peticiones de la API.
+        'delay_between_pages_ms' => (int) env('RICKANDMORTY_DELAY_BETWEEN_PAGES_MS', 250),
     ],
 
 ];
